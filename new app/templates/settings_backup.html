@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Backup Settings - TaskFlow{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="mb-0"><i class="bi bi-cloud-arrow-up"></i> Backup Settings</h4>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importBackupModal">
+                    <i class="bi bi-upload"></i> Import Backup
+                </button>
+                <form method="POST" action="{{ url_for('backup_now') }}" class="d-inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-download"></i> Backup Now
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Auto Backup Settings -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-gear"></i> Auto Backup Configuration</h6>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row align-items-end g-3">
+                        <div class="col-md-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="auto_backup" id="autoBackup"
+                                       {{ 'checked' if settings.get('auto_backup', '0') == '1' }}>
+                                <label class="form-check-label" for="autoBackup">Enable Auto Backup</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Backup Interval (minutes)</label>
+                            <input type="number" name="backup_interval_minutes" class="form-control" min="1" max="1440"
+                                   value="{{ settings.get('backup_interval_minutes', '60') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Backup List -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-archive"></i> Available Backups</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Backup File</th>
+                                <th>Date/Time</th>
+                                <th>Size</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in backups %}
+                            <tr>
+                                <td><i class="bi bi-file-earmark-zip text-primary"></i> {{ b.name }}</td>
+                                <td>{{ b.date }}</td>
+                                <td>{{ b.size }} MB</td>
+                                <td>
+                                    <a href="{{ url_for('download_backup', filename=b.name) }}" class="btn btn-sm btn-outline-primary" title="Download">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" title="Restore"
+                                            onclick="openRestoreModal('{{ b.name }}')">
+                                        <i class="bi bi-arrow-counterclockwise"></i> Restore
+                                    </button>
+                                    <form method="POST" action="{{ url_for('delete_backup', filename=b.name) }}" class="d-inline"
+                                          onsubmit="return confirm('Delete this backup?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">No backups yet. Click "Backup Now" to create one.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reset Database -->
+        <div class="card border-0 shadow-sm border-danger" style="border-left: 4px solid #dc3545 !important;">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Danger Zone</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Reset Database</strong>
+                        <p class="text-muted mb-0 small">Delete all data and reset to factory defaults. A safety backup will be created automatically before reset.</p>
+                    </div>
+                    <form method="POST" action="{{ url_for('reset_database') }}"
+                          onsubmit="return prompt('Type RESET to confirm:') === 'RESET';">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-arrow-repeat me-1"></i>Reset Database
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restore Backup Modal -->
+<div class="modal fade" id="restoreBackupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0" style="border-radius:16px;overflow:hidden;">
+            <div class="modal-header py-3" style="background:linear-gradient(135deg,#e8a01a 0%,#c47f00 100%);">
+                <h5 class="modal-title text-white">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Restore Backup
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="restoreForm" method="POST" action="">
+                <div class="modal-body p-4">
+                    <p class="text-muted mb-2">Restoring: <strong id="restoreFileName"></strong></p>
+                    <hr>
+                    <label class="form-label fw-bold">Select what to restore:</label>
+                    <div class="mb-3">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="restoreAll" checked onchange="toggleRestoreAll(this)">
+                            <label class="form-check-label fw-bold" for="restoreAll">All Data (Full Restore)</label>
+                        </div>
+                        <hr class="my-2">
+                        <div id="restoreOptions">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="users" id="rUsers" checked>
+                                <label class="form-check-label" for="rUsers"><i class="bi bi-people text-primary me-1"></i> Users & Roles</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="tasks,task_groups" id="rTasks" checked>
+                                <label class="form-check-label" for="rTasks"><i class="bi bi-list-task text-success me-1"></i> Tasks & Groups</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="deliveries,delivery_persons,delivery_payments,customers,vehicle_types" id="rDeliveries" checked>
+                                <label class="form-check-label" for="rDeliveries"><i class="bi bi-truck text-info me-1"></i> Deliveries, Drivers, Payments & Customers</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="hr_employees,hr_leaves" id="rHR" checked>
+                                <label class="form-check-label" for="rHR"><i class="bi bi-person-badge text-warning me-1"></i> HR (Employees & Leaves)</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="vehicles,vehicle_documents" id="rVehicles" checked>
+                                <label class="form-check-label" for="rVehicles"><i class="bi bi-car-front text-secondary me-1"></i> Vehicles & Documents</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="messages,notifications" id="rMessages" checked>
+                                <label class="form-check-label" for="rMessages"><i class="bi bi-chat-dots text-danger me-1"></i> Messages & Notifications</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="settings" id="rSettings" checked>
+                                <label class="form-check-label" for="rSettings"><i class="bi bi-gear text-dark me-1"></i> Settings</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input restore-option" type="checkbox" name="tables" value="activity_logs" id="rLogs" checked>
+                                <label class="form-check-label" for="rLogs"><i class="bi bi-journal-text text-muted me-1"></i> Activity Logs</label>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" name="restore_mode" id="restoreMode" value="full">
+                    <div class="alert alert-warning py-2 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <small>A safety backup will be created before restore. Selected data in the current database will be replaced.</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Import Backup Modal -->
+<div class="modal fade" id="importBackupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0" style="border-radius:16px;overflow:hidden;">
+            <div class="modal-header py-3" style="background:linear-gradient(135deg,#1a73e8 0%,#0a4da6 100%);">
+                <h5 class="modal-title text-white">
+                    <i class="bi bi-upload me-2"></i>Import Backup
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('import_backup') }}" enctype="multipart/form-data">
+                <div class="modal-body p-4">
+                    <p class="text-muted mb-3">Upload a <code>.db</code> backup file to restore your data.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Select Backup File</label>
+                        <input type="file" name="backup_file" class="form-control" accept=".db" required>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="restore_now" value="1" id="restoreNow" checked>
+                        <label class="form-check-label" for="restoreNow">
+                            <strong>Restore immediately</strong>
+                            <small class="text-muted d-block">Replace current data with this backup. A safety backup is created first.</small>
+                        </label>
+                    </div>
+                    <div class="alert alert-warning py-2 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <small>Only upload backup files from this application. Uncheck "Restore immediately" to just add the file to the list.</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload me-1"></i>Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openRestoreModal(filename) {
+    document.getElementById('restoreFileName').textContent = filename;
+    document.getElementById('restoreForm').action = '/backup/restore/' + filename;
+    // Reset all checkboxes
+    document.getElementById('restoreAll').checked = true;
+    document.getElementById('restoreMode').value = 'full';
+    document.querySelectorAll('.restore-option').forEach(cb => { cb.checked = true; cb.disabled = true; });
+    new bootstrap.Modal(document.getElementById('restoreBackupModal')).show();
+}
+function toggleRestoreAll(el) {
+    const opts = document.querySelectorAll('.restore-option');
+    if (el.checked) {
+        document.getElementById('restoreMode').value = 'full';
+        opts.forEach(cb => { cb.checked = true; cb.disabled = true; });
+    } else {
+        document.getElementById('restoreMode').value = 'selective';
+        opts.forEach(cb => { cb.disabled = false; });
+    }
+}
+</script>
+{% endblock %}
